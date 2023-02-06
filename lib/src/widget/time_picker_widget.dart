@@ -205,9 +205,10 @@ class _TimePickerWidgetState extends State<TimePickerWidget> {
             _changeHourSelection(value);
           } else if (format.contains('m')) {
             _changeMinuteSelection(value);
-          } else if (format.contains('s')) {
-            _changeSecondSelection(value);
           }
+//           else if (format.contains('s')) {
+//             _changeSecondSelection(value);
+//           }
         },
         minuteDivider: widget.minuteDivider,
       );
