@@ -9,23 +9,20 @@ import '../date_picker_constants.dart';
 import '../i18n/date_picker_i18n.dart';
 import 'date_picker_title_widget.dart';
 
-/// Solar months of 31 days.
-const List<int> _solarMonthsOf31Days = const <int>[1, 3, 5, 7, 8, 10, 12];
-
-/// DatePicker widget.
+/// TimePicker widget.
 ///
 /// @author dylan wu
 /// @since 2019-05-10
-class DatePickerWidget extends StatefulWidget {
-  DatePickerWidget({
+class TimePickerWidget extends StatefulWidget {
+  TimePickerWidget({
     Key? key,
-    this.onMonthChangeStartWithFirstDate,
     this.minDateTime,
     this.maxDateTime,
-    this.initialDateTime,
-    this.dateFormat: DATETIME_PICKER_DATE_FORMAT,
+    this.initDateTime,
+    this.dateFormat: DATETIME_PICKER_TIME_FORMAT,
     this.locale: DATETIME_PICKER_LOCALE_DEFAULT,
     this.pickerTheme: DateTimePickerTheme.Default,
+    this.minuteDivider = 1,
     this.onCancel,
     this.onChange,
     this.onConfirm,
@@ -35,76 +32,84 @@ class DatePickerWidget extends StatefulWidget {
     assert(minTime.compareTo(maxTime) < 0);
   }
 
-  final DateTime? minDateTime, maxDateTime, initialDateTime;
+  final DateTime? minDateTime, maxDateTime, initDateTime;
   final String? dateFormat;
   final DateTimePickerLocale locale;
   final DateTimePickerTheme pickerTheme;
-
   final DateVoidCallback? onCancel;
   final DateValueCallback? onChange, onConfirm;
-  final onMonthChangeStartWithFirstDate;
+  final int minuteDivider;
 
   @override
-  State<StatefulWidget> createState() => _DatePickerWidgetState(
-      this.minDateTime, this.maxDateTime, this.initialDateTime);
+  State<StatefulWidget> createState() => _TimePickerWidgetState(
+      this.minDateTime,
+      this.maxDateTime,
+      this.initDateTime,
+      this.minuteDivider);
 }
 
-class _DatePickerWidgetState extends State<DatePickerWidget> {
-  DateTime _minDateTime = DateTime(0), _maxDateTime = DateTime(0);
-  int _currYear = 0, _currMonth = 0, _currDay = 0;
-  List<int> _yearRange = [], _monthRange = [], _dayRange = [];
-  FixedExtentScrollController _yearScrollCtrl = FixedExtentScrollController(),
-      _monthScrollCtrl = FixedExtentScrollController(),
-      _dayScrollCtrl = FixedExtentScrollController();
+class _TimePickerWidgetState extends State<TimePickerWidget> {
+  DateTime _minTime = DateTime(1), _maxTime = DateTime(1);
+  int _currHour = 0, _currMinute = 0, _currSecond = 0;
+  int _minuteDivider = 0;
+  List<int> _hourRange = [], _minuteRange = [], _secondRange = [];
+  FixedExtentScrollController _hourScrollCtrl = FixedExtentScrollController(),
+      _minuteScrollCtrl = FixedExtentScrollController(),
+      _secondScrollCtrl = FixedExtentScrollController();
 
   Map<String, FixedExtentScrollController> _scrollCtrlMap = Map();
   Map<String, List<int>> _valueRangeMap = Map();
 
-  bool _isChangeDateRange = false;
-  Map<String, int> _initialIndexMap = {
-    'y': -1,
-    'M': -1,
-    'd': -1,
-  };
+  bool _isChangeTimeRange = false;
 
-  _DatePickerWidgetState(
-      DateTime? minDateTime, DateTime? maxDateTime, DateTime? initialDateTime) {
-    // handle current selected year、month、day
-    DateTime initDateTime = initialDateTime ?? DateTime.now();
-    this._currYear = initDateTime.year;
-    this._currMonth = initDateTime.month;
-    this._currDay = initDateTime.day;
+  _TimePickerWidgetState(DateTime? minTime, DateTime? maxTime,
+      DateTime? initTime, int minuteDivider) {
+    if (minTime == null) {
+      minTime = DateTime.parse(DATE_PICKER_MIN_DATETIME);
+    }
+    if (maxTime == null) {
+      maxTime = DateTime.parse(DATE_PICKER_MAX_DATETIME);
+    }
+    if (initTime == null) {
+      // init time is now
+      initTime = DateTime.now();
+    }
+    this._minTime = minTime;
+    this._maxTime = maxTime;
+    this._currHour = initTime.hour;
+    this._currMinute = initTime.minute;
+    this._currSecond = initTime.second;
 
-    // handle DateTime range
-    this._minDateTime = minDateTime ?? DateTime.parse(DATE_PICKER_MIN_DATETIME);
-    this._maxDateTime = maxDateTime ?? DateTime.parse(DATE_PICKER_MAX_DATETIME);
+    this._minuteDivider = minuteDivider;
 
-    // limit the range of year
-    this._yearRange = _calcYearRange();
-    this._currYear = min(max(_minDateTime.year, _currYear), _maxDateTime.year);
+    // limit the range of hour
+    this._hourRange = _calcHourRange();
+    this._currHour = min(max(_hourRange.first, _currHour), _hourRange.last);
 
-    // limit the range of month
-    this._monthRange = _calcMonthRange();
-    this._currMonth = min(max(_monthRange.first, _currMonth), _monthRange.last);
+    // limit the range of minute
+    this._minuteRange = _calcMinuteRange();
+    this._currMinute =
+        min(max(_minuteRange.first, _currMinute), _minuteRange.last);
 
-    // limit the range of day
-    this._dayRange = _calcDayRange();
-    this._currDay = min(max(_dayRange.first, _currDay), _dayRange.last);
+    // limit the range of second
+    this._secondRange = _calcSecondRange();
+    this._currSecond =
+        min(max(_secondRange.first, _currSecond), _secondRange.last);
 
     // create scroll controller
-    _yearScrollCtrl =
-        FixedExtentScrollController(initialItem: _currYear - _yearRange.first);
-    _monthScrollCtrl = FixedExtentScrollController(
-        initialItem: _currMonth - _monthRange.first);
-    _dayScrollCtrl =
-        FixedExtentScrollController(initialItem: _currDay - _dayRange.first);
+    _hourScrollCtrl =
+        FixedExtentScrollController(initialItem: _currHour - _hourRange.first);
+    _minuteScrollCtrl = FixedExtentScrollController(
+        initialItem: (_currMinute - _minuteRange.first) ~/ _minuteDivider);
+    _secondScrollCtrl = FixedExtentScrollController(
+        initialItem: _currSecond - _secondRange.first);
 
     _scrollCtrlMap = {
-      'y': _yearScrollCtrl,
-      'M': _monthScrollCtrl,
-      'd': _dayScrollCtrl
+      'H': _hourScrollCtrl,
+      'm': _minuteScrollCtrl,
+      's': _secondScrollCtrl
     };
-    _valueRangeMap = {'y': _yearRange, 'M': _monthRange, 'd': _dayRange};
+    _valueRangeMap = {'H': _hourRange, 'm': _minuteRange, 's': _secondRange};
   }
 
   @override
@@ -115,9 +120,9 @@ class _DatePickerWidgetState extends State<DatePickerWidget> {
     );
   }
 
-  /// render date picker widgets
+  /// render time picker widgets
   Widget _renderPickerView(BuildContext context) {
-    Widget datePickerWidget = _renderDatePickerWidget();
+    Widget pickerWidget = _renderDatePickerWidget();
 
     // display the title widget
     if (widget.pickerTheme.title != null || widget.pickerTheme.showTitle) {
@@ -127,9 +132,9 @@ class _DatePickerWidgetState extends State<DatePickerWidget> {
         pickerTheme: widget.pickerTheme,
         locale: widget.locale,
       );
-      return Column(children: <Widget>[titleWidget, datePickerWidget]);
+      return Column(children: <Widget>[titleWidget, pickerWidget]);
     }
-    return datePickerWidget;
+    return pickerWidget;
   }
 
   /// pressed cancel widget
@@ -143,23 +148,27 @@ class _DatePickerWidgetState extends State<DatePickerWidget> {
   /// pressed confirm widget
   void _onPressedConfirm() {
     if (widget.onConfirm != null) {
-      DateTime dateTime = DateTime(_currYear, _currMonth, _currDay);
+      DateTime now = DateTime.now();
+      DateTime dateTime = DateTime(
+          now.year, now.month, now.day, _currHour, _currMinute, _currSecond);
       widget.onConfirm!(dateTime, _calcSelectIndexList());
     }
     Navigator.pop(context);
   }
 
-  /// notify selected date changed
+  /// notify selected time changed
   void _onSelectedChange() {
     if (widget.onChange != null) {
-      DateTime dateTime = DateTime(_currYear, _currMonth, _currDay);
+      DateTime now = DateTime.now();
+      DateTime dateTime = DateTime(
+          now.year, now.month, now.day, _currHour, _currMinute, _currSecond);
       widget.onChange!(dateTime, _calcSelectIndexList());
     }
   }
 
   /// find scroll controller by specified format
-  FixedExtentScrollController? _findScrollCtrl(String format) {
-    FixedExtentScrollController? scrollCtrl;
+  FixedExtentScrollController _findScrollCtrl(String format) {
+    FixedExtentScrollController scrollCtrl = FixedExtentScrollController();
     _scrollCtrlMap.forEach((key, value) {
       if (format.contains(key)) {
         scrollCtrl = value;
@@ -192,23 +201,17 @@ class _DatePickerWidgetState extends State<DatePickerWidget> {
         valueRange,
         format,
         (value) {
-          if (format.contains('y')) {
-            _changeYearSelection(value);
-          } else if (format.contains('M')) {
-            _changeMonthSelection(value);
-          } else if (format.contains('d')) {
-            _changeDaySelection(value);
+          if (format.contains('H')) {
+            _changeHourSelection(value);
+          } else if (format.contains('m')) {
+            _changeMinuteSelection(value);
           }
+//           else if (format.contains('s')) {
+//             _changeSecondSelection(value);
+//           }
         },
+        minuteDivider: widget.minuteDivider,
       );
-
-      if ((_initialIndexMap[format[0]] ?? -1) > -1) {
-        Future.microtask(() {
-          _findScrollCtrl(format[0])?.jumpToItem(_initialIndexMap[format[0]]!);
-          _initialIndexMap[format[0]] = -1;
-        });
-      }
-
       pickers.add(pickerColumn);
     });
     return Row(
@@ -216,11 +219,12 @@ class _DatePickerWidgetState extends State<DatePickerWidget> {
   }
 
   Widget _renderDatePickerColumnComponent(
-    FixedExtentScrollController? scrollCtrl,
-    List<int>? valueRange,
+    FixedExtentScrollController scrollCtrl,
+    List<int> valueRange,
     String format,
-    ValueChanged<int>? valueChanged,
-  ) {
+    ValueChanged<int> valueChanged, {
+    required int minuteDivider,
+  }) {
     return Expanded(
       flex: 1,
       child: Container(
@@ -232,16 +236,30 @@ class _DatePickerWidgetState extends State<DatePickerWidget> {
           scrollController: scrollCtrl,
           itemExtent: widget.pickerTheme.itemHeight,
           onSelectedItemChanged: valueChanged,
-          childCount: valueRange?.last == null || valueRange?.first == null
-              ? null
-              : valueRange!.last - valueRange.first + 1,
-          itemBuilder: (context, index) => valueRange?.first == null
-              ? null
-              : _renderDatePickerItemComponent(
-                  valueRange!.first + index, format),
+          childCount: format.contains('m')
+              ? _calculateMinuteChildCount(valueRange, minuteDivider)
+              : valueRange.last - valueRange.first + 1,
+          itemBuilder: (context, index) {
+            int value = valueRange.first + index;
+
+            if (format.contains('m')) {
+              value = minuteDivider * index + valueRange.first;
+            }
+
+            return _renderDatePickerItemComponent(value, format);
+          },
         ),
       ),
     );
+  }
+
+  _calculateMinuteChildCount(List<int> valueRange, int divider) {
+    if (divider == 0) {
+      print("Cant devide by 0");
+      return (valueRange.last - valueRange.first + 1);
+    }
+
+    return (valueRange.last - valueRange.first + 1) ~/ divider;
   }
 
   Widget _renderDatePickerItemComponent(int value, String format) {
@@ -256,157 +274,144 @@ class _DatePickerWidgetState extends State<DatePickerWidget> {
     );
   }
 
-  /// change the selection of year picker
-  void _changeYearSelection(int index) {
-    int year = _yearRange.first + index;
-    if (_currYear != year) {
-      _currYear = year;
-      _changeDateRange();
+  /// change the selection of hour picker
+  void _changeHourSelection(int index) {
+    int value = _hourRange.first + index;
+    if (_currHour != value) {
+      _currHour = value;
+      _changeTimeRange();
       _onSelectedChange();
     }
   }
 
-  /// change the selection of month picker
-  void _changeMonthSelection(int index) {
-    int month = _monthRange.first + index;
-    if (_currMonth != month) {
-      _currMonth = month;
-      _changeDateRange();
+  /// change the selection of minute picker
+  void _changeMinuteSelection(int index) {
+    int value = index * _minuteDivider + _minuteRange.first;
+    if (_currMinute != value) {
+      _currMinute = value;
+      _changeTimeRange();
       _onSelectedChange();
     }
   }
 
-  /// change the selection of day picker
-  void _changeDaySelection(int index) {
-    int dayOfMonth = _dayRange.first + index;
-    if (_currDay != dayOfMonth) {
-      _currDay = dayOfMonth;
+  /// change the selection of second picker
+  void _changeSecondSelection(int index) {
+    int value = _secondRange.first + index;
+    if (_currSecond != value) {
+      _currSecond = value;
       _onSelectedChange();
     }
   }
 
-  /// change range of month and day
-  void _changeDateRange() {
-    if (_isChangeDateRange) {
+  /// change range of minute and second
+  void _changeTimeRange() {
+    if (_isChangeTimeRange) {
       return;
     }
-    _isChangeDateRange = true;
+    _isChangeTimeRange = true;
 
-    List<int> monthRange = _calcMonthRange();
-    bool monthRangeChanged = _monthRange.first != monthRange.first ||
-        _monthRange.last != monthRange.last;
-    if (monthRangeChanged) {
-      // selected year changed
-      _currMonth = max(min(_currMonth, monthRange.last), monthRange.first);
+    List<int> minuteRange = _calcMinuteRange();
+    bool minuteRangeChanged = _minuteRange.first != minuteRange.first ||
+        _minuteRange.last != minuteRange.last;
+    if (minuteRangeChanged) {
+      // selected hour changed
+      _currMinute = max(min(_currMinute, minuteRange.last), minuteRange.first);
     }
 
-    List<int> dayRange = _calcDayRange();
-    bool dayRangeChanged =
-        _dayRange.first != dayRange.first || _dayRange.last != dayRange.last;
-    if (dayRangeChanged) {
-      // day range changed, need limit the value of selected day
-      if (!widget.onMonthChangeStartWithFirstDate) {
-        _currDay = max(min(_currDay, dayRange.last), dayRange.first);
-      } else {
-        _currDay = dayRange.first;
-      }
+    List<int> secondRange = _calcSecondRange();
+    bool secondRangeChanged = _secondRange.first != secondRange.first ||
+        _secondRange.last != secondRange.last;
+    if (secondRangeChanged) {
+      // second range changed, need limit the value of selected second
+      _currSecond = max(min(_currSecond, secondRange.last), secondRange.first);
     }
 
     setState(() {
-      _monthRange = monthRange;
-      _dayRange = dayRange;
+      _minuteRange = minuteRange;
+      _secondRange = secondRange;
 
-      _valueRangeMap['M'] = monthRange;
-      _valueRangeMap['d'] = dayRange;
+      _valueRangeMap['m'] = minuteRange;
+      _valueRangeMap['s'] = secondRange;
     });
 
-    if (monthRangeChanged) {
+    if (minuteRangeChanged) {
       // CupertinoPicker refresh data not working (https://github.com/flutter/flutter/issues/22999)
-      int currMonth = _currMonth;
-      // _monthScrollCtrl.jumpToItem(monthRange.last - monthRange.first);
-      _initialIndexMap['M'] = monthRange.last - monthRange.first;
-      if (currMonth < monthRange.last) {
-        _initialIndexMap['M'] = currMonth - monthRange.first;
-        // _monthScrollCtrl.jumpToItem(currMonth - monthRange.first);
+      int currMinute = _currMinute;
+      _minuteScrollCtrl
+          .jumpToItem((minuteRange.last - minuteRange.first) ~/ _minuteDivider);
+      if (currMinute < minuteRange.last) {
+        _minuteScrollCtrl.jumpToItem(currMinute - minuteRange.first);
       }
     }
 
-    if (dayRangeChanged) {
+    if (secondRangeChanged) {
       // CupertinoPicker refresh data not working (https://github.com/flutter/flutter/issues/22999)
-      int currDay = _currDay;
-      // _dayScrollCtrl.jumpToItem(dayRange.last - dayRange.first);
-      _initialIndexMap['d'] = dayRange.last - dayRange.first;
-      if (currDay < dayRange.last) {
-        // _dayScrollCtrl.jumpToItem(currDay - dayRange.first);
-        _initialIndexMap['d'] = currDay - dayRange.first;
+      int currSecond = _currSecond;
+      _secondScrollCtrl.jumpToItem(secondRange.last - secondRange.first);
+      if (currSecond < secondRange.last) {
+        _secondScrollCtrl.jumpToItem(currSecond - secondRange.first);
       }
     }
 
-    _isChangeDateRange = false;
-  }
-
-  /// calculate the count of day in current month
-  int _calcDayCountOfMonth() {
-    if (_currMonth == 2) {
-      return isLeapYear(_currYear) ? 29 : 28;
-    } else if (_solarMonthsOf31Days.contains(_currMonth)) {
-      return 31;
-    }
-    return 30;
-  }
-
-  /// whether or not is leap year
-  bool isLeapYear(int year) {
-    return (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    _isChangeTimeRange = false;
   }
 
   /// calculate selected index list
   List<int> _calcSelectIndexList() {
-    int yearIndex = _currYear - _minDateTime.year;
-    int monthIndex = _currMonth - _monthRange.first;
-    int dayIndex = _currDay - _dayRange.first;
-    return [yearIndex, monthIndex, dayIndex];
+    int hourIndex = _currHour - _hourRange.first;
+    int minuteIndex = _currMinute - _minuteRange.first;
+    // int secondIndex = _currSecond - _secondRange.first;
+    return [hourIndex, minuteIndex];
   }
 
-  /// calculate the range of year
-  List<int> _calcYearRange() {
-    return [_minDateTime.year, _maxDateTime.year];
+  /// calculate the range of hour
+  List<int> _calcHourRange() {
+    return [_minTime.hour, _maxTime.hour];
   }
 
-  /// calculate the range of month
-  List<int> _calcMonthRange() {
-    int minMonth = 1, maxMonth = 12;
-    int minYear = _minDateTime.year;
-    int maxYear = _maxDateTime.year;
-    if (minYear == _currYear) {
-      // selected minimum year, limit month range
-      minMonth = _minDateTime.month;
+  /// calculate the range of minute
+  List<int> _calcMinuteRange({currHour}) {
+    int minMinute = 0, maxMinute = 59;
+    int minHour = _minTime.hour;
+    int maxHour = _maxTime.hour;
+    if (currHour == null) {
+      currHour = _currHour;
     }
-    if (maxYear == _currYear) {
-      // selected maximum year, limit month range
-      maxMonth = _maxDateTime.month;
+
+    if (minHour == currHour) {
+      // selected minimum hour, limit minute range
+      minMinute = _minTime.minute;
     }
-    return [minMonth, maxMonth];
+    if (maxHour == currHour) {
+      // selected maximum hour, limit minute range
+      maxMinute = _maxTime.minute;
+    }
+    return [minMinute, maxMinute];
   }
 
-  /// calculate the range of day
-  List<int> _calcDayRange({currMonth}) {
-    int minDay = 1, maxDay = _calcDayCountOfMonth();
-    int minYear = _minDateTime.year;
-    int maxYear = _maxDateTime.year;
-    int minMonth = _minDateTime.month;
-    int maxMonth = _maxDateTime.month;
-    if (currMonth == null) {
-      currMonth = _currMonth;
+  /// calculate the range of second
+  List<int> _calcSecondRange({currHour, currMinute}) {
+    int minSecond = 0, maxSecond = 59;
+    int minHour = _minTime.hour;
+    int maxHour = _maxTime.hour;
+    int minMinute = _minTime.minute;
+    int maxMinute = _maxTime.minute;
+
+    if (currHour == null) {
+      currHour = _currHour;
     }
-    if (minYear == _currYear && minMonth == currMonth) {
-      // selected minimum year and month, limit day range
-      minDay = _minDateTime.day;
+    if (currMinute == null) {
+      currMinute = _currMinute;
     }
-    if (maxYear == _currYear && maxMonth == currMonth) {
-      // selected maximum year and month, limit day range
-      maxDay = _maxDateTime.day;
+
+    if (minHour == currHour && minMinute == currMinute) {
+      // selected minimum hour and minute, limit second range
+      minSecond = _minTime.second;
     }
-    return [minDay, maxDay];
+    if (maxHour == currHour && maxMinute == currMinute) {
+      // selected maximum hour and minute, limit second range
+      maxSecond = _maxTime.second;
+    }
+    return [minSecond, maxSecond];
   }
 }
